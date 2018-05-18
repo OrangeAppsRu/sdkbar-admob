@@ -7,6 +7,11 @@ static void printLog(const char* str) {
     CCLOG("%s", str);
 }
 
+firebase::admob::AdParent getAdParent() {
+    // Returns the iOS RootViewController's main view (i.e. the EAGLView).
+    return (id)Director::getInstance()->getOpenGLView()->getEAGLView();
+}
+
 void register_all_admob_framework(JSContext* cx, JS::HandleObject obj) {
     printLog("register_all_admob_framework");
     JS::RootedObject ns(cx);

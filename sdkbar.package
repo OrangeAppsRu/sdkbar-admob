@@ -10,17 +10,17 @@ sdkbar.gradle_dependencies(["compile 'com.google.firebase:firebase-ads:15.0.0'",
 sdkbox.xcode_add_sources(['AdMob.mm'])
 
 
-#sdkbar.appDelegateInject({
-#    'ios': {
-#         'include': 'OkSdk.h',
-#         'function': 'register_all_oksdk_framework'
-#    },
-#    'marker': SDKBOX_PACKAGE_NAME,
-#    'android': {
-#         'include': 'OkSdk.hpp',
-#         'function': 'register_all_oksdk_framework'
-#    }
-#})
+sdkbar.appDelegateInject({
+    'ios': {
+         'include': 'AdMob.h',
+         'function': 'register_all_admob_framework'
+    },
+    'marker': SDKBOX_PACKAGE_NAME,
+    'android': {
+         'include': 'AdMob.hpp',
+         'function': 'register_all_admob_framework'
+    }
+})
 
 # sdkbar.gradleProject('odnoklassniki-android-sdk', './odnoklassniki-android-sdk')
 sdkbox.android_add_sources(['../../Classes/AdMob.cpp'])
