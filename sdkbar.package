@@ -7,14 +7,10 @@ sdkbox.android_add_static_libraries(['firebase', 'admob'])
 sdkbox.android_add_calls(['import-module, ./admob'])
 sdkbar.gradle_dependencies(["compile 'com.google.firebase:firebase-ads:15.0.0'", "compile 'com.google.ads.mediation:chartboost:7.0.1.0'", "compile 'com.google.ads.mediation:unity:2.2.0.0'", "compile 'com.google.ads.mediation:facebook:4.27.1.0'"])
 
-sdkbox.xcode_add_sources(['AdMob.mm'])
+# sdkbox.xcode_add_sources(['AdMob.mm'])
 
 
 sdkbar.appDelegateInject({
-    'ios': {
-         'include': 'AdMob.h',
-         'function': 'register_all_admob_framework'
-    },
     'marker': SDKBOX_PACKAGE_NAME,
     'android': {
          'include': 'AdMob.hpp',
