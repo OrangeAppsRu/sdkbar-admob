@@ -15,6 +15,7 @@
 static firebase::admob::AdRequest my_ad_request = {};
 static firebase::admob::BannerView *sharedBannerView = NULL;
 static firebase::admob::InterstitialAd *sharedInterstitialAd = NULL;
+static bool rewarded_inited = false;
 
 static void printLog(const char* str) {
     CCLOG("%s", str);
@@ -98,20 +99,24 @@ static void BannerShowCallback(const firebase::Future<void>& future, void* user_
 */
 
 static void BannerLoadCallback(const firebase::Future<void>& future, void* user_data) {
-    BannerSettings *settings = static_cast<BannerSettings*>(user_data);
-    CallbackFrame *cb = CallbackFrame::getById(settings->callbackId);
-    JS::AutoValueVector valArr(cb->cx);
-    if (future.error() == firebase::admob::kAdMobErrorNone) {
-        printLog("Banner load complete");
-        valArr.append(JSVAL_TRUE);
-    } else {
-        printLog("Banner load error");
-        valArr.append(JSVAL_FALSE);
-    }
-    JS::HandleValueArray funcArgs = JS::HandleValueArray::fromMarkedLocation(1, valArr.begin());
-    cb->call(funcArgs);
-    delete settings;
-    delete cb;
+    cocos2d::Director::getInstance()->getScheduler()->performFunctionInCocosThread([future, user_data] {
+            BannerSettings *settings = static_cast<BannerSettings*>(user_data);
+            CallbackFrame *cb = CallbackFrame::getById(settings->callbackId);
+            JSAutoRequest rq(cb->cx);
+            JSAutoCompartment ac(cb->cx, cb->_ctxObject.ref());
+            JS::AutoValueVector valArr(cb->cx);
+            if (future.error() == firebase::admob::kAdMobErrorNone) {
+                printLog("Banner load complete");
+                valArr.append(JSVAL_TRUE);
+            } else {
+                printLog("Banner load error");
+                valArr.append(JSVAL_FALSE);
+            }
+            JS::HandleValueArray funcArgs = JS::HandleValueArray::fromMarkedLocation(1, valArr.begin());
+            cb->call(funcArgs);
+            delete settings;
+            delete cb;
+        });
 }
 
 static void BannerInitCallback(const firebase::Future<void>& future, void* user_data) {
@@ -119,16 +124,20 @@ static void BannerInitCallback(const firebase::Future<void>& future, void* user_
     if (future.error() == firebase::admob::kAdMobErrorNone) {
         printLog("Banner init complete");
         settings->bannerView->LoadAd(my_ad_request);
-        settings->bannerView->LoadAdLastResult()->OnCompletion(BennerLoadCallback, settings);
+        settings->bannerView->LoadAdLastResult().OnCompletion(BannerLoadCallback, settings);
     } else {
         printLog("Banner init error");
-        CallbackFrame *cb = CallbackFrame::getById(settings->callbackId);
-        JS::AutoValueVector valArr(cb->cx);
-        valArr.append(JSVAL_FALSE);
-        JS::HandleValueArray funcArgs = JS::HandleValueArray::fromMarkedLocation(1, valArr.begin());
-        cb->call(funcArgs);
-        delete settings;
-        delete cb;
+        cocos2d::Director::getInstance()->getScheduler()->performFunctionInCocosThread([settings] {
+                CallbackFrame *cb = CallbackFrame::getById(settings->callbackId);
+                JSAutoRequest rq(cb->cx);
+                JSAutoCompartment ac(cb->cx, cb->_ctxObject.ref());
+                JS::AutoValueVector valArr(cb->cx);
+                valArr.append(JSVAL_FALSE);
+                JS::HandleValueArray funcArgs = JS::HandleValueArray::fromMarkedLocation(1, valArr.begin());
+                cb->call(funcArgs);
+                delete settings;
+                delete cb;
+            });
     }
 }
 
@@ -136,7 +145,7 @@ static void BannerHideCallback(const firebase::Future<void>& future, void* user_
     firebase::admob::BannerView *bannerView = static_cast<firebase::admob::BannerView*>(user_data);
     if (future.error() == firebase::admob::kAdMobErrorNone) {
         printLog("Banner hide complete");
-        banner_view->Destroy();
+        bannerView->Destroy();
     } else {
         printLog("Banner hide error");
     }
@@ -152,11 +161,15 @@ public:
     void OnPresentationStateChanged(firebase::admob::BannerView* banner_view, firebase::admob::BannerView::PresentationState state) override {
         // This method gets called when the banner view's presentation
         // state changes.
-        printLog("[AdMob] Banner state changed");
-        JS::AutoValueVector valArr(cb->cx);
-        valArr.append(int32_to_jsval(cb->cx, state));
-        JS::HandleValueArray funcArgs = JS::HandleValueArray::fromMarkedLocation(1, valArr.begin());
-        cb->call(funcArgs);
+        cocos2d::Director::getInstance()->getScheduler()->performFunctionInCocosThread([this, state] {
+                printLog("[AdMob] Banner state changed");
+                JSAutoRequest rq(cb->cx);
+                JSAutoCompartment ac(cb->cx, cb->_ctxObject.ref());
+                JS::AutoValueVector valArr(cb->cx);
+                valArr.append(int32_to_jsval(cb->cx, state));
+                JS::HandleValueArray funcArgs = JS::HandleValueArray::fromMarkedLocation(1, valArr.begin());
+                cb->call(funcArgs);
+            });
     }
 
     void OnBoundingBoxChanged(firebase::admob::BannerView* banner_view, firebase::admob::BoundingBox box) override {
@@ -207,6 +220,15 @@ static bool jsb_admob_is_banner_loaded(JSContext *cx, uint32_t argc, jsval *vp)
     JS::RootedObject obj(cx, args.thisv().toObjectOrNull());
     JS::CallReceiver rec = JS::CallReceiverFromVp(vp);
     if(argc == 0) {
+        if (sharedBannerView != NULL &&
+            sharedBannerView->LoadAdLastResult().status() == firebase::kFutureStatusComplete &&
+            sharedBannerView->LoadAdLastResult().error() == firebase::admob::kAdMobErrorNone) {
+            rec.rval().set(JSVAL_TRUE);
+            return true;
+        } else {
+            rec.rval().set(JSVAL_FALSE);
+            return false;
+        }
     } else {
         JS_ReportError(cx, "Invalid number of arguments");
         return false;
@@ -272,7 +294,7 @@ static bool jsb_admob_close_banner(JSContext *cx, uint32_t argc, jsval *vp)
 ///////////////////////////////////////
 
 typedef struct InterstitialSettings {
-    firebase::admob::InterstitialAd *interstitial_ad
+    firebase::admob::InterstitialAd *interstitial_ad;
     int callbackId;
     InterstitialSettings(firebase::admob::InterstitialAd *ad, int cbId) {
         interstitial_ad = ad;
@@ -281,20 +303,24 @@ typedef struct InterstitialSettings {
 } InterstitialSettings;
 
 static void InterstitialLoadCallback(const firebase::Future<void>& future, void* user_data) {
-    InterstitialSettings *settings = static_cast<InterstitialSettings*>(user_data);
-    CallbackFrame *cb = CallbackFrame::getById(settings->callbackId);
-    JS::AutoValueVector valArr(cb->cx);
-    if (future.error() == firebase::admob::kAdMobErrorNone) {
-        printLog("Interstitial load complete");
-        valArr.append(JSVAL_TRUE);
-    } else {
-        printLog("Interstitial load error");
-        valArr.append(JSVAL_FALSE);
-    }
-    JS::HandleValueArray funcArgs = JS::HandleValueArray::fromMarkedLocation(1, valArr.begin());
-    cb->call(funcArgs);
-    delete settings;
-    delete cb;
+    cocos2d::Director::getInstance()->getScheduler()->performFunctionInCocosThread([future, user_data] {
+            InterstitialSettings *settings = static_cast<InterstitialSettings*>(user_data);
+            CallbackFrame *cb = CallbackFrame::getById(settings->callbackId);
+            JSAutoRequest rq(cb->cx);
+            JSAutoCompartment ac(cb->cx, cb->_ctxObject.ref());
+            JS::AutoValueVector valArr(cb->cx);
+            if (future.error() == firebase::admob::kAdMobErrorNone) {
+                printLog("Interstitial load complete");
+                valArr.append(JSVAL_TRUE);
+            } else {
+                printLog("Interstitial load error");
+                valArr.append(JSVAL_FALSE);
+            }
+            JS::HandleValueArray funcArgs = JS::HandleValueArray::fromMarkedLocation(1, valArr.begin());
+            cb->call(funcArgs);
+            delete settings;
+            delete cb;
+        });
 }
 
 static void InterstitialInitCallback(const firebase::Future<void>& future, void* user_data) {
@@ -304,14 +330,18 @@ static void InterstitialInitCallback(const firebase::Future<void>& future, void*
         settings->interstitial_ad->LoadAdLastResult().OnCompletion(InterstitialLoadCallback, settings);
         printLog("Interstitial init complete");
     } else {
-        CallbackFrame *cb = CallbackFrame::getById(settings->callbackId);
-        JS::AutoValueVector valArr(cb->cx);
-        valArr.append(JSVAL_FALSE);
-        JS::HandleValueArray funcArgs = JS::HandleValueArray::fromMarkedLocation(1, valArr.begin());
-        cb->call(funcArgs);
-        delete settings;
-        delete cb;
-        printLog("Interstitial init error");
+        cocos2d::Director::getInstance()->getScheduler()->performFunctionInCocosThread([settings] {
+                printLog("Interstitial init error");
+                CallbackFrame *cb = CallbackFrame::getById(settings->callbackId);
+                JSAutoRequest rq(cb->cx);
+                JSAutoCompartment ac(cb->cx, cb->_ctxObject.ref());
+                JS::AutoValueVector valArr(cb->cx);
+                valArr.append(JSVAL_FALSE);
+                JS::HandleValueArray funcArgs = JS::HandleValueArray::fromMarkedLocation(1, valArr.begin());
+                cb->call(funcArgs);
+                delete settings;
+                delete cb;
+            });
     }
 }
 
@@ -323,11 +353,15 @@ public:
     };
 
     void OnPresentationStateChanged(firebase::admob::InterstitialAd* interstitialAd, firebase::admob::InterstitialAd::PresentationState state) override {
-        printLog("[AdMob] InterstitialAd state changed");
-        JS::AutoValueVector valArr(cb->cx);
-        valArr.append(int32_to_jsval(cb->cx, state));
-        JS::HandleValueArray funcArgs = JS::HandleValueArray::fromMarkedLocation(1, valArr.begin());
-        cb->call(funcArgs);
+        cocos2d::Director::getInstance()->getScheduler()->performFunctionInCocosThread([this, state] {
+                printLog("[AdMob] InterstitialAd state changed");
+                JSAutoRequest rq(cb->cx);
+                JSAutoCompartment ac(cb->cx, cb->_ctxObject.ref());
+                JS::AutoValueVector valArr(cb->cx);
+                valArr.append(int32_to_jsval(cb->cx, state));
+                JS::HandleValueArray funcArgs = JS::HandleValueArray::fromMarkedLocation(1, valArr.begin());
+                cb->call(funcArgs);
+            });
     }
     
     ~MyInterstitialAdListener() {
@@ -424,38 +458,47 @@ typedef struct RewardedSettings {
 } RewardedSettings;
 
 static void RewardedLoadedCallback(const firebase::Future<void>& future, void* user_data) {
-    RewardedSettings *settings = static_cast<RewardedSettings*>(user_data);
-    CallbackFrame *cb = CallbackFrame::getById(settings->callbackId);
-    JS::AutoValueVector valArr(cb->cx);
-    if (future.error() == firebase::admob::kAdMobErrorNone) {
-        //firebase::admob::rewarded_video::Show(getAdParent());
-        printLog("Rewarded load complete");
-        valArr.append(JSVAL_TRUE);
-    } else {
-        printLog("Rewarded load error");
-        valArr.append(JSVAL_FALSE);
-    }
-    JS::HandleValueArray funcArgs = JS::HandleValueArray::fromMarkedLocation(1, valArr.begin());
-    cb->call(funcArgs);
-    delete settings;
-    delete cb;
+    cocos2d::Director::getInstance()->getScheduler()->performFunctionInCocosThread([future, user_data] {
+            RewardedSettings *settings = static_cast<RewardedSettings*>(user_data);
+            CallbackFrame *cb = CallbackFrame::getById(settings->callbackId);
+            JSAutoRequest rq(cb->cx);
+            JSAutoCompartment ac(cb->cx, cb->_ctxObject.ref());
+            JS::AutoValueVector valArr(cb->cx);
+            if (future.error() == firebase::admob::kAdMobErrorNone) {
+                //firebase::admob::rewarded_video::Show(getAdParent());
+                printLog("Rewarded load complete");
+                valArr.append(JSVAL_TRUE);
+            } else {
+                printLog("Rewarded load error");
+                valArr.append(JSVAL_FALSE);
+            }
+            JS::HandleValueArray funcArgs = JS::HandleValueArray::fromMarkedLocation(1, valArr.begin());
+            cb->call(funcArgs);
+            delete settings;
+            delete cb;
+        });
 }
 
 static void RewardedInitCallback(const firebase::Future<void>& future, void* user_data) {
     RewardedSettings *settings = static_cast<RewardedSettings*>(user_data);
     if (future.error() == firebase::admob::kAdMobErrorNone) {
-        firebase::admob::rewarded_video::LoadAd(settings->adId->c_str(), my_ad_request);
+        rewarded_inited = true;
+        firebase::admob::rewarded_video::LoadAd(settings->adId.c_str(), my_ad_request);
         firebase::admob::rewarded_video::LoadAdLastResult().OnCompletion(RewardedLoadedCallback, settings);
         printLog("Rewarded init complete");
     } else {
-        CallbackFrame *cb = CallbackFrame::getById(settings->callbackId);
-        JS::AutoValueVector valArr(cb->cx);
-        valArr.append(JSVAL_FALSE);
-        JS::HandleValueArray funcArgs = JS::HandleValueArray::fromMarkedLocation(1, valArr.begin());
-        cb->call(funcArgs);
-        delete settings;
-        delete cb;
-        printLog("Rewarded init error");
+        cocos2d::Director::getInstance()->getScheduler()->performFunctionInCocosThread([settings] {
+                printLog("Rewarded init error");
+                CallbackFrame *cb = CallbackFrame::getById(settings->callbackId);
+                JSAutoRequest rq(cb->cx);
+                JSAutoCompartment ac(cb->cx, cb->_ctxObject.ref());
+                JS::AutoValueVector valArr(cb->cx);
+                valArr.append(JSVAL_FALSE);
+                JS::HandleValueArray funcArgs = JS::HandleValueArray::fromMarkedLocation(1, valArr.begin());
+                cb->call(funcArgs);
+                delete settings;
+                delete cb;
+            });
     }
 }
 
@@ -471,11 +514,15 @@ public:
     }
 
     void OnPresentationStateChanged(firebase::admob::rewarded_video::PresentationState state) override {
-        printLog("[AdMob] InterstitialAd state changed");
-        JS::AutoValueVector valArr(cb->cx);
-        valArr.append(int32_to_jsval(cb->cx, state));
-        JS::HandleValueArray funcArgs = JS::HandleValueArray::fromMarkedLocation(1, valArr.begin());
-        cb->call(funcArgs);
+        cocos2d::Director::getInstance()->getScheduler()->performFunctionInCocosThread([this, state] {
+                printLog("[AdMob] InterstitialAd state changed");
+                JSAutoRequest rq(cb->cx);
+                JSAutoCompartment ac(cb->cx, cb->_ctxObject.ref());
+                JS::AutoValueVector valArr(cb->cx);
+                valArr.append(int32_to_jsval(cb->cx, state));
+                JS::HandleValueArray funcArgs = JS::HandleValueArray::fromMarkedLocation(1, valArr.begin());
+                cb->call(funcArgs);
+            });
     }
     
     ~MyRewardedVideoListener() {
@@ -516,7 +563,8 @@ static bool jsb_admob_is_rewarded_loaded(JSContext *cx, uint32_t argc, jsval *vp
     JS::RootedObject obj(cx, args.thisv().toObjectOrNull());
     JS::CallReceiver rec = JS::CallReceiverFromVp(vp);
     if(argc == 0) {
-        if (firebase::admob::rewarded_video::LoadAdLastResult().status() == firebase::kFutureStatusComplete &&
+        if (rewarded_inited &&
+            firebase::admob::rewarded_video::LoadAdLastResult().status() == firebase::kFutureStatusComplete &&
             firebase::admob::rewarded_video::LoadAdLastResult().error() == firebase::admob::kAdMobErrorNone) {
             rec.rval().set(JSVAL_TRUE);
             return true;
