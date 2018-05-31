@@ -544,10 +544,13 @@ static bool jsb_admob_load_rewarded(JSContext *cx, uint32_t argc, jsval *vp)
         JS::RootedValue arg0Val(cx, args.get(0));
         ok &= jsval_to_std_string(cx, arg0Val, &bannerId);
         RewardedSettings *settings = new RewardedSettings(bannerId, cb->callbackId);
-
-        firebase::admob::rewarded_video::Initialize();
-        firebase::admob::rewarded_video::InitializeLastResult().OnCompletion(RewardedInitCallback, settings);
-        
+        if(!rewarded_inited) {
+            firebase::admob::rewarded_video::Initialize();
+            firebase::admob::rewarded_video::InitializeLastResult().OnCompletion(RewardedInitCallback, settings);
+        } else {
+            firebase::admob::rewarded_video::LoadAd(settings->adId.c_str(), my_ad_request);
+            firebase::admob::rewarded_video::LoadAdLastResult().OnCompletion(RewardedLoadedCallback, settings);
+        }
         rec.rval().set(JSVAL_TRUE);
         return true;
     } else {
