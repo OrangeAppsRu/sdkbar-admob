@@ -510,7 +510,15 @@ public:
     };
 
     void OnRewarded(firebase::admob::rewarded_video::RewardItem item) override {
-        printLog("[AdMob] On reward item");
+        cocos2d::Director::getInstance()->getScheduler()->performFunctionInCocosThread([this] {
+                printLog("[AdMob] On reward item");
+                JSAutoRequest rq(cb->cx);
+                JSAutoCompartment ac(cb->cx, cb->_ctxObject.ref());
+                JS::AutoValueVector valArr(cb->cx);
+                valArr.append(int32_to_jsval(cb->cx, 3));
+                JS::HandleValueArray funcArgs = JS::HandleValueArray::fromMarkedLocation(1, valArr.begin());
+                cb->call(funcArgs);
+            });
     }
 
     void OnPresentationStateChanged(firebase::admob::rewarded_video::PresentationState state) override {
