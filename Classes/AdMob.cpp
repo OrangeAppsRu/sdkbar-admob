@@ -570,9 +570,11 @@ static bool jsb_admob_is_rewarded_loaded(JSContext *cx, uint32_t argc, jsval *vp
             firebase::admob::rewarded_video::LoadAdLastResult().status() == firebase::kFutureStatusComplete &&
             firebase::admob::rewarded_video::LoadAdLastResult().error() == firebase::admob::kAdMobErrorNone) {
             rec.rval().set(JSVAL_TRUE);
+            printLog("Admob: rewarded is loaded!");
             return true;
         } else {
             rec.rval().set(JSVAL_FALSE);
+            printLog("Admob: rewarded not loaded");
             return false;
         }
     } else {
@@ -595,9 +597,11 @@ static bool jsb_admob_show_rewarded(JSContext *cx, uint32_t argc, jsval *vp)
             firebase::admob::rewarded_video::SetListener(new MyRewardedVideoListener(cb->callbackId));
             firebase::admob::rewarded_video::Show(getAdParent());
             rec.rval().set(JSVAL_TRUE);
+            printLog("Admob: rewarded started");
             return true;
         } else {
             rec.rval().set(JSVAL_FALSE);
+            printLog("Admob: rewarded not started");
             return false;
         }
     } else {
