@@ -11,6 +11,7 @@
 #include "firebase/admob.h"
 #include "firebase/admob/banner_view.h"
 #include "firebase/admob/interstitial_ad.h"
+#include "firebase/remote_config.h"
 
 static std::string ApplicationId;
 static std::vector<std::string> testDeviceIds;
@@ -59,6 +60,12 @@ static bool jsb_admob_init(JSContext *cx, uint32_t argc, jsval *vp)
         // Initialize AdMob.
         firebase::admob::Initialize(*app, advertisingId.c_str());
 #endif
+        if(firebase::remote_config::Initialize(*app) == firebase::kInitResultSuccess) {
+            if(firebase::remote_config::ActivateFetched()) {
+                printLog("Firebase: activate fetched config");
+            }
+            firebase::remote_config::Fetch();
+        }
         ApplicationId = advertisingId;
         rec.rval().set(JSVAL_TRUE);
         return true;
@@ -126,6 +133,99 @@ static bool jsb_admob_add_test_device(JSContext *cx, uint32_t argc, jsval *vp)
     }
 }
 
+///////////////////////////////////////
+//
+//  Remote Config
+//
+///////////////////////////////////////
+
+static bool jsb_admob_get_boolean(JSContext *cx, uint32_t argc, jsval *vp)
+{
+    printLog("jsb_admob_get_boolean");
+    JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
+    JS::RootedObject obj(cx, args.thisv().toObjectOrNull());
+    JS::CallReceiver rec = JS::CallReceiverFromVp(vp);
+    if(argc == 1) {
+        // key
+        bool ok = true;
+        std::string key;
+        JS::RootedValue arg0Val(cx, args.get(0));
+        ok &= jsval_to_std_string(cx, arg0Val, &key);
+        if(firebase::remote_config::GetBoolean(key.c_str())) {
+            rec.rval().set(JSVAL_TRUE);
+        } else {
+            rec.rval().set(JSVAL_FALSE);
+        }
+        return true;
+    } else {
+        JS_ReportError(cx, "Invalid number of arguments");
+        return false;
+    }
+}
+
+
+static bool jsb_admob_get_integer(JSContext *cx, uint32_t argc, jsval *vp)
+{
+    printLog("jsb_admob_get_integer");
+    JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
+    JS::RootedObject obj(cx, args.thisv().toObjectOrNull());
+    JS::CallReceiver rec = JS::CallReceiverFromVp(vp);
+    if(argc == 1) {
+        // key
+        bool ok = true;
+        std::string key;
+        JS::RootedValue arg0Val(cx, args.get(0));
+        ok &= jsval_to_std_string(cx, arg0Val, &key);
+        int64_t value = firebase::remote_config::GetLong(key.c_str());
+        rec.rval().set(JS::Int32Value(value));
+        return true;
+    } else {
+        JS_ReportError(cx, "Invalid number of arguments");
+        return false;
+    }
+}
+
+static bool jsb_admob_get_double(JSContext *cx, uint32_t argc, jsval *vp)
+{
+    printLog("jsb_admob_get_double");
+    JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
+    JS::RootedObject obj(cx, args.thisv().toObjectOrNull());
+    JS::CallReceiver rec = JS::CallReceiverFromVp(vp);
+    if(argc == 1) {
+        // key
+        bool ok = true;
+        std::string key;
+        JS::RootedValue arg0Val(cx, args.get(0));
+        ok &= jsval_to_std_string(cx, arg0Val, &key);
+        double value = firebase::remote_config::GetDouble(key.c_str());
+        rec.rval().set(JS::DoubleValue(value));
+        return true;
+    } else {
+        JS_ReportError(cx, "Invalid number of arguments");
+        return false;
+    }
+}
+
+static bool jsb_admob_get_string(JSContext *cx, uint32_t argc, jsval *vp)
+{
+    printLog("jsb_admob_get_string");
+    JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
+    JS::RootedObject obj(cx, args.thisv().toObjectOrNull());
+    JS::CallReceiver rec = JS::CallReceiverFromVp(vp);
+    if(argc == 1) {
+        // key
+        bool ok = true;
+        std::string key;
+        JS::RootedValue arg0Val(cx, args.get(0));
+        ok &= jsval_to_std_string(cx, arg0Val, &key);
+        std::string value = firebase::remote_config::GetString(key.c_str());
+        rec.rval().set(std_string_to_jsval(cx, value));
+        return true;
+    } else {
+        JS_ReportError(cx, "Invalid number of arguments");
+        return false;
+    }
+}
 
 ///////////////////////////////////////
 //
@@ -695,6 +795,11 @@ void register_all_admob_framework(JSContext* cx, JS::HandleObject obj) {
     JS_DefineFunction(cx, ns, "init", jsb_admob_init, 1, JSPROP_ENUMERATE | JSPROP_PERMANENT);
     JS_DefineFunction(cx, ns, "launch_test_suite", jsb_admob_launch_test_suite, 0, JSPROP_ENUMERATE | JSPROP_PERMANENT);
     JS_DefineFunction(cx, ns, "add_test_device", jsb_admob_add_test_device, 1, JSPROP_ENUMERATE | JSPROP_PERMANENT);
+
+    JS_DefineFunction(cx, ns, "get_boolean", jsb_admob_get_boolean, 1, JSPROP_ENUMERATE | JSPROP_PERMANENT);
+    JS_DefineFunction(cx, ns, "get_integer", jsb_admob_get_integer, 1, JSPROP_ENUMERATE | JSPROP_PERMANENT);
+    JS_DefineFunction(cx, ns, "get_double", jsb_admob_get_double, 1, JSPROP_ENUMERATE | JSPROP_PERMANENT);
+    JS_DefineFunction(cx, ns, "get_string", jsb_admob_get_string, 1, JSPROP_ENUMERATE | JSPROP_PERMANENT);
 
     JS_DefineFunction(cx, ns, "load_banner", jsb_admob_load_banner, 3, JSPROP_ENUMERATE | JSPROP_PERMANENT);
     JS_DefineFunction(cx, ns, "is_banner_loaded", jsb_admob_is_banner_loaded, 0, JSPROP_ENUMERATE | JSPROP_PERMANENT);
