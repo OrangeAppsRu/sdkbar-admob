@@ -12,6 +12,9 @@
 #include "firebase/admob/banner_view.h"
 #include "firebase/admob/interstitial_ad.h"
 
+static std::string ApplicationId;
+static std::vector<std::string> testDeviceIds;
+static const char* testingDevices[100];
 static firebase::admob::AdRequest my_ad_request = {};
 static firebase::admob::BannerView *sharedBannerView = NULL;
 static firebase::admob::InterstitialAd *sharedInterstitialAd = NULL;
@@ -56,6 +59,7 @@ static bool jsb_admob_init(JSContext *cx, uint32_t argc, jsval *vp)
         // Initialize AdMob.
         firebase::admob::Initialize(*app, advertisingId.c_str());
 #endif
+        ApplicationId = advertisingId;
         rec.rval().set(JSVAL_TRUE);
         return true;
     } else {
@@ -63,6 +67,65 @@ static bool jsb_admob_init(JSContext *cx, uint32_t argc, jsval *vp)
         return false;
     }
 }
+
+static bool jsb_admob_launch_test_suite(JSContext *cx, uint32_t argc, jsval *vp)
+{
+    printLog("jsb_admob_launch_test_suite");
+    JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
+    JS::RootedObject obj(cx, args.thisv().toObjectOrNull());
+    JS::CallReceiver rec = JS::CallReceiverFromVp(vp);
+    if(argc == 0) {
+        if(ApplicationId.size() > 0) {
+
+            cocos2d::JniMethodInfo methodInfo;
+            if (! cocos2d::JniHelper::getStaticMethodInfo(methodInfo, "com/google/android/ads/mediationtestsuite/MediationTestSuite", "launch", "(Landroid/content/Context;Ljava/lang/String;)V")) {
+                rec.rval().set(JSVAL_FALSE);
+                return false;
+            }
+            jstring str = methodInfo.env->NewStringUTF(ApplicationId.c_str());
+            methodInfo.env->CallStaticVoidMethod(methodInfo.classID, methodInfo.methodID, cocos2d::JniHelper::getActivity(), str);
+            methodInfo.env->DeleteLocalRef(str);
+            methodInfo.env->DeleteLocalRef(methodInfo.classID);
+
+            rec.rval().set(JSVAL_TRUE);
+        } else {
+            rec.rval().set(JSVAL_FALSE);
+        }
+        return true;
+    } else {
+        JS_ReportError(cx, "Invalid number of arguments");
+        return false;
+    }
+}
+
+static bool jsb_admob_add_test_device(JSContext *cx, uint32_t argc, jsval *vp)
+{
+    printLog("jsb_admob_add_test_device");
+    JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
+    JS::RootedObject obj(cx, args.thisv().toObjectOrNull());
+    JS::CallReceiver rec = JS::CallReceiverFromVp(vp);
+    if(argc == 1) {
+        // device id
+        bool ok = true;
+        std::string deviceId;
+        JS::RootedValue arg0Val(cx, args.get(0));
+        ok &= jsval_to_std_string(cx, arg0Val, &deviceId);
+        testDeviceIds.push_back(deviceId);
+
+        my_ad_request.test_device_id_count = testDeviceIds.size();
+        for(int i=0; i<testDeviceIds.size(); i++) {
+            testingDevices[i] = testDeviceIds[i].c_str();
+            printLog(testDeviceIds[i].c_str());
+        }
+        my_ad_request.test_device_ids = testingDevices;
+        rec.rval().set(JSVAL_TRUE);
+        return true;
+    } else {
+        JS_ReportError(cx, "Invalid number of arguments");
+        return false;
+    }
+}
+
 
 ///////////////////////////////////////
 //
@@ -630,6 +693,8 @@ void register_all_admob_framework(JSContext* cx, JS::HandleObject obj) {
     get_or_create_js_obj(cx, obj, "admob", &ns);
 
     JS_DefineFunction(cx, ns, "init", jsb_admob_init, 1, JSPROP_ENUMERATE | JSPROP_PERMANENT);
+    JS_DefineFunction(cx, ns, "launch_test_suite", jsb_admob_launch_test_suite, 0, JSPROP_ENUMERATE | JSPROP_PERMANENT);
+    JS_DefineFunction(cx, ns, "add_test_device", jsb_admob_add_test_device, 1, JSPROP_ENUMERATE | JSPROP_PERMANENT);
 
     JS_DefineFunction(cx, ns, "load_banner", jsb_admob_load_banner, 3, JSPROP_ENUMERATE | JSPROP_PERMANENT);
     JS_DefineFunction(cx, ns, "is_banner_loaded", jsb_admob_is_banner_loaded, 0, JSPROP_ENUMERATE | JSPROP_PERMANENT);

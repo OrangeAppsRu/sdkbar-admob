@@ -6,7 +6,7 @@ sdkbox.copy_files(['ios/firebase.framework', 'ios/firebase_admob.framework', 'io
 
 sdkbox.android_add_static_libraries(['firebase', 'admob'])
 sdkbox.android_add_calls(['import-module, ./admob'])
-sdkbar.gradle_dependencies(["compile 'com.google.firebase:firebase-ads:15.0.0'", "compile 'com.google.ads.mediation:chartboost:7.0.1.0'", "compile 'com.google.ads.mediation:unity:2.2.0.0'", "compile 'com.google.ads.mediation:facebook:4.27.1.0'"])
+sdkbar.gradle_dependencies(["compile 'com.google.firebase:firebase-ads:15.0.1'", "compile 'com.google.ads.mediation:chartboost:7.0.1.0'", "compile 'com.google.ads.mediation:unity:2.2.0.0'", "compile 'com.google.ads.mediation:facebook:4.27.1.0'", "compile 'com.google.android.gms:play-services-ads:15.0.1'", "compile 'com.google.android.ads:mediation-test-suite:0.9.0'"])
 
 sdkbox.xcode_add_sources(['AdMob.mm'])
 sdkbox.xcode_add_frameworks(['firebase.framework', 'firebase_admob.framework', 'GoogleMobileAds.framework', 'GLKit.framework', 'MessageUI.framework'])
