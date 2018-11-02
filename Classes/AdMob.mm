@@ -14,6 +14,9 @@
 #include "scripting/js-bindings/manual/cocos2d_specifics.hpp"
 #import <StoreKit/StoreKit.h>
 
+static std::string ApplicationId;
+static std::vector<std::string> testDeviceIds;
+static const char* testingDevices[100];
 static firebase::admob::AdRequest my_ad_request = {};
 static firebase::admob::BannerView *sharedBannerView = NULL;
 static firebase::admob::InterstitialAd *sharedInterstitialAd = NULL;
@@ -75,6 +78,7 @@ static bool jsb_admob_launch_test_suite(JSContext *cx, uint32_t argc, jsval *vp)
     if(argc == 0) {
         if(ApplicationId.size() > 0) {
 
+#if (CC_TARGET_PLATFORM == CC_PLATFORM_ANDROID)
             cocos2d::JniMethodInfo methodInfo;
             if (! cocos2d::JniHelper::getStaticMethodInfo(methodInfo, "com/google/android/ads/mediationtestsuite/MediationTestSuite", "launch", "(Landroid/content/Context;Ljava/lang/String;)V")) {
                 rec.rval().set(JSVAL_FALSE);
@@ -84,6 +88,10 @@ static bool jsb_admob_launch_test_suite(JSContext *cx, uint32_t argc, jsval *vp)
             methodInfo.env->CallStaticVoidMethod(methodInfo.classID, methodInfo.methodID, cocos2d::JniHelper::getActivity(), str);
             methodInfo.env->DeleteLocalRef(str);
             methodInfo.env->DeleteLocalRef(methodInfo.classID);
+#endif
+#if (CC_TARGET_PLATFORM == CC_PLATFORM_IOS)
+            // TODO
+#endif
 
             rec.rval().set(JSVAL_TRUE);
         } else {
